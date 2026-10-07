@@ -5,16 +5,30 @@ interface Props {
   title: string;
   description?: string;
   image?: string;
+  imageAlt?: string;
   lang?: 'fr-CA' | 'en-CA';
   alternateHref?: string;
+  type?: 'website' | 'article';
+  publishedTime?: string;
+  modifiedTime?: string;
+  author?: string;
+  tags?: string[];
+  robots?: string;
 }
 
 const {
   title,
   description = 'Tales from the Scarf — Nicolas Georgeault',
   image,
+  imageAlt,
   lang = 'fr-CA',
   alternateHref,
+  type = 'website',
+  publishedTime,
+  modifiedTime,
+  author,
+  tags = [],
+  robots = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
 } = Astro.props;
 
 const base = import.meta.env.BASE_URL;
@@ -26,6 +40,48 @@ const communitiesHref = isEnglish ? `${base}en-ca/communities/` : `${base}commun
 const personalHref = isEnglish ? `${base}en-ca/personal-notes/` : `${base}carnets-personnels/`;
 const searchHref = isEnglish ? `${base}en-ca/search/` : `${base}recherche/`;
 const switchTarget = alternateHref ?? (isEnglish ? base : `${base}en-ca/`);
+
+const siteUrl = Astro.site ?? new URL(Astro.url.origin);
+const canonicalUrl = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateUrl = alternateHref ? new URL(alternateHref, siteUrl).toString() : undefined;
+const socialImage = image ? new URL(image, siteUrl).toString() : undefined;
+const ogLocale = isEnglish ? 'en_CA' : 'fr_CA';
+const alternateLocale = isEnglish ? 'fr_CA' : 'en_CA';
+const keywords = tags.length > 0 ? tags.join(', ') : undefined;
+
+const structuredData = type === 'article'
+  ? {
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: title,
+      description,
+      url: canonicalUrl,
+      mainEntityOfPage: canonicalUrl,
+      inLanguage: lang,
+      ...(socialImage ? { image: [socialImage] } : {}),
+      ...(publishedTime ? { datePublished: publishedTime } : {}),
+      ...(modifiedTime || publishedTime ? { dateModified: modifiedTime ?? publishedTime } : {}),
+      ...(author ? { author: { '@type': 'Person', name: author } } : {}),
+      ...(keywords ? { keywords } : {}),
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'Tales from the Scarf',
+        url: new URL(base, siteUrl).toString(),
+      },
+    }
+  : {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: title,
+      description,
+      url: canonicalUrl,
+      inLanguage: lang,
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'Tales from the Scarf',
+        url: new URL(base, siteUrl).toString(),
+      },
+    };
 ---
 <!doctype html>
 <html lang={lang}>
@@ -33,11 +89,51 @@ const switchTarget = alternateHref ?? (isEnglish ? base : `${base}en-ca/`);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <meta name="description" content={description} />
+    <meta name="robots" content={robots} />
+    {author && <meta name="author" content={author} />}
+    {keywords && <meta name="keywords" content={keywords} />}
     <meta name="generator" content={Astro.generator} />
+
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="alternate" hreflang={lang} href={canonicalUrl} />
+    {alternateUrl && (
+      <link rel="alternate" hreflang={isEnglish ? 'fr-CA' : 'en-CA'} href={alternateUrl} />
+    )}
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href={isEnglish && alternateUrl ? alternateUrl : canonicalUrl}
+    />
+
+    <meta property="og:type" content={type} />
+    <meta property="og:site_name" content="Tales from the Scarf" />
+    <meta property="og:locale" content={ogLocale} />
+    {alternateUrl && <meta property="og:locale:alternate" content={alternateLocale} />}
+    <meta property="og:url" content={canonicalUrl} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    {image && <meta property="og:image" content={image} />}
+    {socialImage && <meta property="og:image" content={socialImage} />}
+    {socialImage && imageAlt && <meta property="og:image:alt" content={imageAlt} />}
+
+    <meta name="twitter:card" content={socialImage ? 'summary_large_image' : 'summary'} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {socialImage && <meta name="twitter:image" content={socialImage} />}
+    {socialImage && imageAlt && <meta name="twitter:image:alt" content={imageAlt} />}
+
+    {type === 'article' && publishedTime && (
+      <meta property="article:published_time" content={publishedTime} />
+    )}
+    {type === 'article' && (modifiedTime || publishedTime) && (
+      <meta property="article:modified_time" content={modifiedTime ?? publishedTime} />
+    )}
+    {type === 'article' && tags.map((tag: string) => (
+      <meta property="article:tag" content={tag} />
+    ))}
+
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)}></script>
     <title>{title}</title>
+
     {import.meta.env.PUBLIC_UMAMI_SCRIPT_URL && import.meta.env.PUBLIC_UMAMI_WEBSITE_ID && (
       <script
         defer
